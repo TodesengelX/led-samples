@@ -9,9 +9,11 @@ from adafruit_led_animation.color import WHITE, BLACK
 # --- Configuration ---
 NEOPIXEL_PIN = board.D13
 NUM_PIXELS = 96
-BRIGHTNESS = 0.5 
+# We set brightness lower to prevent "Yellowing" (voltage drop) 
+# and ensure the data signal stays strong.
+BRIGHTNESS = 0.3 
 
-# --- HARDWARE DRIVER (The one we know works) ---
+# --- DRIVER (EXACTLY AS IT WAS IN THE WORKING SCRIPT) ---
 class Pi5Pixelbuf(adafruit_pixelbuf.PixelBuf):
     def __init__(self, pin, size, **kwargs):
         self._pin = pin
@@ -20,56 +22,50 @@ class Pi5Pixelbuf(adafruit_pixelbuf.PixelBuf):
     def _transmit(self, buf):
         neopixel_write(self._pin, buf)
 
-# --- CRITICAL SETTING ---
-# auto_write=False is the secret. It prevents the "Green/Yellow" data crash.
-pixels = Pi5Pixelbuf(NEOPIXEL_PIN, NUM_PIXELS, auto_write=False, byteorder="BGR", brightness=BRIGHTNESS)
+# We use auto_write=True because this was the setting in the script that WORKED.
+# We will manage the "flood" of data by using a slow animation speed.
+pixels = Pi5Pixelbuf(NEOPIXEL_PIN, NUM_PIXELS, auto_write=True, byteorder="BGR", brightness=BRIGHTNESS)
 
-# --- YOUR CUSTOM PATTERN LOGIC ---
-class MySpecificLights(Animation):
-    def __init__(self, pixel_object, color):
-        # Refresh rate of 1.0 second. We don't need speed, we need stability.
-        super().__init__(pixel_object, speed=1.0, color=color)
+# --- CUSTOM LOGIC ---
+class SpecificPattern(Animation):
+    def __init__(self, pixel_object):
+        # speed=0.5 means it refreshes every half second. 
+        # This prevents the "Green/Yellow" data flood.
+        super().__init__(pixel_object, speed=0.5, color=WHITE)
 
     def draw(self):
-        # 1. Wipe the slate clean (in memory)
+        # 1. Clear everything (Black)
         self.pixel_object.fill(BLACK)
         
-        # 2. Apply the "Every 3rd LED" rule first
-        # Range(start, stop, step) -> 0, 3, 6, 9, 12, 15...
+        # 2. Set "Every 3rd LED" (0, 3, 6, 9, 12...)
+        # We step by 3.
         for i in range(0, 96, 3):
-             self.pixel_object[i] = WHITE
-             
-        # 3. Apply your Specific Overrides
-        # You wanted: 1st, 3rd, 7th, 10th
-        
-        # 1st LED is index 0 (Already covered by loop, but let's be sure)
+            self.pixel_object[i] = WHITE
+            
+        # 3. Add your specific overrides
+        # 1st LED (Index 0) - Already done by loop, but we ensure it.
         self.pixel_object[0] = WHITE
         
-        # 3rd LED is index 2 (This is the tricky one not in the loop!)
+        # 3rd LED (Index 2) - This is the odd one out!
         self.pixel_object[2] = WHITE
         
-        # 7th LED is index 6 (Already in loop, but forcing it just in case)
+        # 7th LED (Index 6) - Already done by loop (3, 6).
         self.pixel_object[6] = WHITE
         
-        # 10th LED is index 9 (Already in loop)
+        # 10th LED (Index 9) - Already done by loop (3, 6, 9).
         self.pixel_object[9] = WHITE
 
-        # 4. SEND THE DATA
-        # This sends one perfect, clean signal to the strip. No confusion.
-        self.pixel_object.show()
+# Initialize the animation
+pattern = SpecificPattern(pixels)
+animations = AnimationSequence(pattern)
 
-# Setup the animation sequence
-custom_pattern = MySpecificLights(pixels, color=WHITE)
-animations = AnimationSequence(custom_pattern)
-
-print("Displaying Custom Pattern: 1st, 3rd, 7th, 10th + Every 3rd...")
+print("Displaying Pattern: 1, 3, 7, 10 + Every 3rd.")
+print("Using 'Extreme' Engine for stability.")
 print("Press Ctrl+C to stop.")
 
 try:
     while True:
-        # This keeps the signal alive and stable
         animations.animate()
 except KeyboardInterrupt:
     print("\nStopping...")
     pixels.fill(BLACK)
-    pixels.show()
