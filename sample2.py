@@ -17,7 +17,7 @@ from adafruit_led_animation.animation.comet import Comet
 from adafruit_led_animation.animation.sparkle import Sparkle
 
 # --- Configuration ---
-NEOPIXEL_PIN = board.D13
+NEOPIXEL_PIN = board.D18
 NUM_PIXELS = 96
 BRIGHTNESS = 0.6  # Cranked up a bit (watch your PSU!)
 
