@@ -22,7 +22,7 @@ from adafruit_led_animation.color import (
 )
 
 # --- Configuration ---
-NEOPIXEL_PIN = board.D13  # Connected to GPIO 13
+NEOPIXEL_PIN = board.D18  # Connected to GPIO 13
 NUM_PIXELS = 96           # Number of LEDs
 BRIGHTNESS = 0.5          # 0.0 to 1.0 (Watch your power supply current!)
 
