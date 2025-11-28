@@ -3,13 +3,17 @@ import board
 import adafruit_pixelbuf
 from adafruit_raspberry_pi5_neopixel_write import neopixel_write
 
+# We use the Animation library because we KNOW it works on your hardware
+from adafruit_led_animation.animation import Animation
+from adafruit_led_animation.sequence import AnimationSequence
+from adafruit_led_animation.color import WHITE, BLACK
+
 # --- Configuration ---
 NEOPIXEL_PIN = board.D13
 NUM_PIXELS = 96
-BRIGHTNESS = 0.5  # Lowered to 0.5 to match the working script and prevent voltage crash
-COLOR_WHITE = (255, 255, 255)
+BRIGHTNESS = 0.5 
 
-# --- HARDWARE DRIVER (Copying the EXACT class from the working script) ---
+# --- HARDWARE DRIVER (The Working Pi 5 Driver) ---
 class Pi5Pixelbuf(adafruit_pixelbuf.PixelBuf):
     def __init__(self, pin, size, **kwargs):
         self._pin = pin
@@ -18,26 +22,38 @@ class Pi5Pixelbuf(adafruit_pixelbuf.PixelBuf):
     def _transmit(self, buf):
         neopixel_write(self._pin, buf)
 
-# --- THE FIX: Change auto_write to True ---
-# We use auto_write=True because we know this worked in the previous script.
+# Initialize exactly like the working script
 pixels = Pi5Pixelbuf(NEOPIXEL_PIN, NUM_PIXELS, auto_write=True, byteorder="BGR", brightness=BRIGHTNESS)
 
-print("Running Loop... Press Ctrl+C to stop.")
+# --- CUSTOM "ANIMATION" FOR STATIC LIGHTS ---
+# We treat the static lights as an animation that just redraws the same thing.
+# This ensures the timing matches the working script perfectly.
+class Static3rdLed(Animation):
+    def __init__(self, pixel_object, color):
+        # speed=0.1 means it refreshes 10 times a second (safe speed)
+        super().__init__(pixel_object, speed=0.1, color=color)
+
+    def draw(self):
+        # Clear everything first to be safe
+        self.pixel_object.fill(BLACK)
+        
+        # Turn on every 3rd pixel
+        for i in range(0, len(self.pixel_object), 3):
+            self.pixel_object[i] = self.color
+
+# Create the "Animation"
+static_white = Static3rdLed(pixels, color=WHITE)
+
+# Use the Sequence manager to run it
+# This handles the loop and timing for us
+animations = AnimationSequence(static_white)
+
+print("Displaying Every 3rd LED (Animation Mode)...")
 
 try:
     while True:
-        # We put the setting inside the loop. 
-        # Even though we are setting the same color over and over, 
-        # this forces the Pi to continuously send the data signal.
-        # This fixes the "Single Shot" issue where Linux might interrupt the signal.
-        
-        for i in range(0, NUM_PIXELS, 3):
-            pixels[i] = COLOR_WHITE
-        
-        # Add a small sleep to prevent CPU overheating, but keep it fast
-        time.sleep(0.1)
-
+        animations.animate()
 except KeyboardInterrupt:
     print("\nStopping...")
-    pixels.fill((0, 0, 0))
-    # No need to call .show() because auto_write is True
+    pixels.fill(BLACK)
+    pixels.show()
