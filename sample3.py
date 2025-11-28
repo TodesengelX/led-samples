@@ -7,7 +7,7 @@ from adafruit_led_animation.sequence import AnimationSequence
 from adafruit_led_animation.color import WHITE, BLACK
 
 # --- Configuration ---
-NEOPIXEL_PIN = board.D13
+NEOPIXEL_PIN = board.D18
 NUM_PIXELS = 96
 BRIGHTNESS = 0.5 
 
@@ -53,3 +53,4 @@ except KeyboardInterrupt:
     print("\nStopping...")
     pixels.fill(BLACK)
     pixels.show()
+    print("LEDs cleared.")  
