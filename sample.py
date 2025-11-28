@@ -64,6 +64,9 @@ def interactive_console():
                 print(f"Pin object: {NEOPIXEL_PIN} (type: {type(NEOPIXEL_PIN)})")
                 print(f"NUM_PIXELS={NUM_PIXELS}, auto_write={pixels.auto_write}")
                 continue
+            if s.lower() in ("order", "o"):
+                test_byteorders()
+                continue
 
             try:
                 n = int(s)
@@ -120,6 +123,50 @@ def run_hardware_test():
         print("neopixel_write(raw) succeeded.")
     except Exception as e:
         print(f"neopixel_write(raw) failed: {e}")
+
+
+def test_byteorders():
+    """Send visible test colors using different byte orders so you can identify the correct ordering.
+
+    The function will send a red test pattern encoded for each candidate order and pause briefly.
+    Observe which test shows a true red pixel; that's the correct byteorder for your strip.
+    """
+    def map_color_to_order(color, order):
+        r, g, b = color
+        mapping = {"R": r, "G": g, "B": b}
+        return bytes((mapping[order[0]], mapping[order[1]], mapping[order[2]]))
+
+    orders = ["GRB", "RGB", "BGR"]
+    test_color = (255, 0, 0)  # target logical R=255
+
+    print("\nByteorder diagnostic: for each test the first pixel should appear RED if ordering matches.")
+    print("If you see GREEN or BLUE instead, note which ordering produced correct RED and we'll change byteorder accordingly.")
+
+    for order in orders:
+        try:
+            print(f"Testing order {order} — sending RED encoded as {order}...")
+            raw = bytearray()
+            pix_bytes = map_color_to_order(test_color, order)
+            for _ in range(NUM_PIXELS):
+                raw += pix_bytes
+            neopixel_write(NEOPIXEL_PIN, raw)
+            time.sleep(1.2)
+            # clear quickly
+            neopixel_write(NEOPIXEL_PIN, bytearray([0]) * (NUM_PIXELS * 3))
+            time.sleep(0.2)
+        except Exception as e:
+            print(f"Error writing test for {order}: {e}")
+
+    print("Byteorder tests finished. Use the ordering that displayed RED correctly.")
+    print("If none looked correct, check wiring, ground, level shifter, and power supply.")
+
+    print("\nQuick troubleshooting checklist:")
+    print("- Ensure 5V supply can source enough current and is connected to the LED strip's +5V and GND.")
+    print("- Ensure Pi ground and strip ground are common (connected).")
+    print("- Add a 1000uF capacitor across +5V and GND at the strip input to prevent voltage sag.")
+    print("- Put a ~300-470 ohm resistor in series with the data line close to the first LED to reduce ringing.")
+    print("- For the 74AHCT125 level shifter: power it from +5V, ensure its output-enable (/OE) pins are set to enable outputs per the datasheet, and tie any unused OE inputs to the enabled state.")
+    print("- If colors stay wrong or change when multiple LEDs are lit, suspect timing/signal integrity or power sag — verify with the 'test' command and a multimeter.")
 
 
 if __name__ == "__main__":
