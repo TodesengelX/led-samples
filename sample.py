@@ -7,6 +7,10 @@ from adafruit_raspberry_pi5_neopixel_write import neopixel_write
 NEOPIXEL_PIN = board.D18  # Data pin
 NUM_PIXELS = 96           # Number of LEDs (adjust to your strip)
 BRIGHTNESS = 0.5          # 0.0 to 1.0
+# Set to 4 for RGBW strips, 3 for RGB strips
+BYTES_PER_PIXEL = 4
+# Default byteorder for PixelBuf (adjust after running 'order' test if needed)
+DEFAULT_BYTEORDER = "BGRW"
 
 
 # --- Raspberry Pi 5 Custom PixelBuf Driver ---
@@ -20,10 +24,16 @@ class Pi5Pixelbuf(adafruit_pixelbuf.PixelBuf):
 
 
 # Initialize the pixel strip with manual writes so we control when updates happen
-pixels = Pi5Pixelbuf(NEOPIXEL_PIN, NUM_PIXELS, auto_write=False, byteorder="BGR", brightness=BRIGHTNESS)
+pixels = Pi5Pixelbuf(
+    NEOPIXEL_PIN,
+    NUM_PIXELS,
+    auto_write=False,
+    byteorder=DEFAULT_BYTEORDER,
+    brightness=BRIGHTNESS,
+)
 
 
-def light_single_led(one_based_index, color=(255, 255, 255)):
+def light_single_led(one_based_index, color=None):
     """Turn off all LEDs and light a single LED (1-based index).
 
     Raises ValueError for out-of-range indices.
@@ -31,6 +41,13 @@ def light_single_led(one_based_index, color=(255, 255, 255)):
     idx = one_based_index - 1
     if idx < 0 or idx >= NUM_PIXELS:
         raise ValueError("LED index out of range")
+
+    # Default color: for RGBW strips use white via the W channel
+    if color is None:
+        if BYTES_PER_PIXEL == 4:
+            color = (0, 0, 0, 255)  # full white via W channel
+        else:
+            color = (255, 255, 255)
 
     # Clear all, set the requested LED, then transmit
     pixels.fill(0)
@@ -102,7 +119,10 @@ def run_hardware_test():
     print("Running hardware test: filling all LEDs white for 2 seconds...")
     try:
         # Try using PixelBuf API first
-        pixels.fill((255, 255, 255))
+        if BYTES_PER_PIXEL == 4:
+            pixels.fill((0, 0, 0, 255))
+        else:
+            pixels.fill((255, 255, 255))
         pixels.show()
         print("PixelBuf.fill/show succeeded (may be brightness-limited). Sleeping 2s...")
         time.sleep(2)
@@ -115,10 +135,14 @@ def run_hardware_test():
     # Try raw neopixel_write with a simple buffer
     try:
         print("Attempting raw neopixel_write with white buffer...")
-        # Build minimal raw buffer: 3 bytes per pixel (RGB)
+        # Build minimal raw buffer depending on pixel depth
         raw = bytearray()
-        for _ in range(NUM_PIXELS):
-            raw += bytes((255, 255, 255))
+        if BYTES_PER_PIXEL == 4:
+            for _ in range(NUM_PIXELS):
+                raw += bytes((0, 0, 0, 255))
+        else:
+            for _ in range(NUM_PIXELS):
+                raw += bytes((255, 255, 255))
         neopixel_write(NEOPIXEL_PIN, raw)
         print("neopixel_write(raw) succeeded.")
     except Exception as e:
@@ -132,12 +156,23 @@ def test_byteorders():
     Observe which test shows a true red pixel; that's the correct byteorder for your strip.
     """
     def map_color_to_order(color, order):
-        r, g, b = color
-        mapping = {"R": r, "G": g, "B": b}
-        return bytes((mapping[order[0]], mapping[order[1]], mapping[order[2]]))
+        # Supports 3- or 4-letter orders (e.g. 'GRB' or 'GRBW')
+        mapping = {}
+        if BYTES_PER_PIXEL == 4:
+            r, g, b, w = color
+            mapping = {"R": r, "G": g, "B": b, "W": w}
+        else:
+            r, g, b = color
+            mapping = {"R": r, "G": g, "B": b}
 
-    orders = ["GRB", "RGB", "BGR"]
-    test_color = (255, 0, 0)  # target logical R=255
+        return bytes(tuple(mapping[ch] for ch in order))
+
+    if BYTES_PER_PIXEL == 4:
+        orders = ["GRBW", "RGBW", "BGRW"]
+        test_color = (255, 0, 0, 0)  # target logical R=255
+    else:
+        orders = ["GRB", "RGB", "BGR"]
+        test_color = (255, 0, 0)  # target logical R=255
 
     print("\nByteorder diagnostic: for each test the first pixel should appear RED if ordering matches.")
     print("If you see GREEN or BLUE instead, note which ordering produced correct RED and we'll change byteorder accordingly.")
@@ -152,7 +187,7 @@ def test_byteorders():
             neopixel_write(NEOPIXEL_PIN, raw)
             time.sleep(1.2)
             # clear quickly
-            neopixel_write(NEOPIXEL_PIN, bytearray([0]) * (NUM_PIXELS * 3))
+            neopixel_write(NEOPIXEL_PIN, bytearray([0]) * (NUM_PIXELS * BYTES_PER_PIXEL))
             time.sleep(0.2)
         except Exception as e:
             print(f"Error writing test for {order}: {e}")
