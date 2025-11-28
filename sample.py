@@ -3,28 +3,11 @@ import board
 import adafruit_pixelbuf
 from adafruit_raspberry_pi5_neopixel_write import neopixel_write
 
-# Import ALL the animations and colors for maximum chaos
-from adafruit_led_animation.animation.blink import Blink
-from adafruit_led_animation.animation.sparkle import Sparkle
-from adafruit_led_animation.animation.comet import Comet
-from adafruit_led_animation.animation.chase import Chase
-from adafruit_led_animation.animation.pulse import Pulse
-from adafruit_led_animation.animation.colorcycle import ColorCycle
-from adafruit_led_animation.animation.rainbow import Rainbow
-from adafruit_led_animation.animation.rainbowchase import RainbowChase
-from adafruit_led_animation.animation.rainbowcomet import RainbowComet
-from adafruit_led_animation.animation.rainbowsparkle import RainbowSparkle
-from adafruit_led_animation.sequence import AnimationSequence
-from adafruit_led_animation.group import AnimationGroup
-from adafruit_led_animation.color import (
-    AMBER, AQUA, BLUE, CYAN, GOLD, GREEN, JADE, MAGENTA, 
-    ORANGE, PINK, PURPLE, RED, TEAL, WHITE, YELLOW, RAINBOW
-)
-
 # --- Configuration ---
-NEOPIXEL_PIN = board.D18  # Connected to GPIO 13
-NUM_PIXELS = 96           # Number of LEDs
-BRIGHTNESS = 0.5          # 0.0 to 1.0 (Watch your power supply current!)
+NEOPIXEL_PIN = board.D18  # Data pin
+NUM_PIXELS = 96           # Number of LEDs (adjust to your strip)
+BRIGHTNESS = 0.5          # 0.0 to 1.0
+
 
 # --- Raspberry Pi 5 Custom PixelBuf Driver ---
 class Pi5Pixelbuf(adafruit_pixelbuf.PixelBuf):
@@ -35,64 +18,71 @@ class Pi5Pixelbuf(adafruit_pixelbuf.PixelBuf):
     def _transmit(self, buf):
         neopixel_write(self._pin, buf)
 
-# Initialize the pixel strip
-pixels = Pi5Pixelbuf(NEOPIXEL_PIN, NUM_PIXELS, auto_write=True, byteorder="BGR", brightness=BRIGHTNESS)
 
-# --- Define Extreme Animations ---
+# Initialize the pixel strip with manual writes so we control when updates happen
+pixels = Pi5Pixelbuf(NEOPIXEL_PIN, NUM_PIXELS, auto_write=False, byteorder="BGR", brightness=BRIGHTNESS)
 
-# 1. High-Speed Rainbow Effects
-fast_rainbow = Rainbow(pixels, speed=0.01, period=2)
-hyper_chase = RainbowChase(pixels, speed=0.01, size=5, spacing=2, step=4)
-crazy_comet = RainbowComet(pixels, speed=0.01, tail_length=20, bounce=True)
 
-# 2. Layered Chaos (Groups)
-# Combining a pulsing background with sparkles on top
-pulsing_background = Pulse(pixels, speed=0.05, color=BLUE, period=2)
-white_sparkles = Sparkle(pixels, speed=0.02, color=WHITE, num_sparkles=10)
-sparkle_pulse_group = AnimationGroup(pulsing_background, white_sparkles)
+def light_single_led(one_based_index, color=(255, 255, 255)):
+    """Turn off all LEDs and light a single LED (1-based index).
 
-# 3. "Police" Strobe Effect
-police_blink_red = Blink(pixels, speed=0.1, color=RED)
-police_blink_blue = Blink(pixels, speed=0.1, color=BLUE)
+    Raises ValueError for out-of-range indices.
+    """
+    idx = one_based_index - 1
+    if idx < 0 or idx >= NUM_PIXELS:
+        raise ValueError("LED index out of range")
 
-# 4. Matrix-style Digital Rain (Green Comet with heavy tail)
-matrix_rain = Comet(pixels, speed=0.02, color=JADE, tail_length=15, bounce=False)
+    # Clear all, set the requested LED, then transmit
+    pixels.fill(0)
+    pixels[idx] = color
+    pixels.show()
 
-# 5. The "Fire" Chase
-fire_chase = Chase(pixels, speed=0.03, color=RED, size=2, spacing=1)
-ember_sparkle = Sparkle(pixels, speed=0.05, color=AMBER, num_sparkles=5)
-fire_storm = AnimationGroup(fire_chase, ember_sparkle)
 
-# 6. Random Color Cycling Strobe
-disco_party = ColorCycle(pixels, speed=0.1, colors=[MAGENTA, CYAN, YELLOW, PURPLE, JADE, ORANGE])
+def interactive_console():
+    print(f"Interactive LED console — pin: D18, LEDs: {NUM_PIXELS}")
+    print("Enter a number 1..{0} to light that LED, or 'q' to quit.".format(NUM_PIXELS))
 
-# 7. Intense Sparkle Storm
-stormy = Sparkle(pixels, speed=0.01, color=TEAL, num_sparkles=25)
-
-# --- The Master Sequence ---
-animations = AnimationSequence(
-    fast_rainbow,           # 0. Smooth rainbow
-    sparkle_pulse_group,    # 1. Blue pulse with white sparkles
-    hyper_chase,            # 2. Fast rainbow chase
-    fire_storm,             # 3. Red chase with amber sparkles
-    crazy_comet,            # 4. Bouncing rainbow comet
-    disco_party,            # 5. Rapid color cycling
-    matrix_rain,            # 6. Green trail
-    stormy,                 # 7. Intense teal sparkles
-    
-    advance_interval=4,     # Switch every 4 seconds
-    auto_clear=True,        # Clear LEDs between modes
-    random_order=True,      # Randomize the order for maximum craziness
-)
-
-print("Starting EXTREME Animation Sequence...")
-
-try:
-    while True:
-        animations.animate()
-except KeyboardInterrupt:
-    print("\nStopping...")
-finally:
+    # Start with all LEDs off
     pixels.fill(0)
     pixels.show()
-    print("LEDs cleared.")
+
+    current = None
+    try:
+        while True:
+            s = input(f"LED number (1-{NUM_PIXELS}) or 'q' to quit: ").strip()
+            if not s:
+                continue
+            if s.lower() in ("q", "quit", "exit"):
+                break
+
+            try:
+                n = int(s)
+            except ValueError:
+                print("Please enter a valid integer or 'q' to quit.")
+                continue
+
+            if n < 1 or n > NUM_PIXELS:
+                print(f"Out of range — enter a number between 1 and {NUM_PIXELS}.")
+                continue
+
+            try:
+                light_single_led(n)
+                current = n
+                print(f"Lit LED {n}.")
+            except Exception as e:
+                print(f"Failed to set LED: {e}")
+
+    except KeyboardInterrupt:
+        print("\nInterrupted by user.")
+    finally:
+        # Ensure we clear the strip on exit
+        try:
+            pixels.fill(0)
+            pixels.show()
+            print("LEDs cleared.")
+        except Exception:
+            print("Could not clear LEDs (hardware may be absent).")
+
+
+if __name__ == "__main__":
+    interactive_console()
