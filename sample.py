@@ -55,6 +55,16 @@ def interactive_console():
             if s.lower() in ("q", "quit", "exit"):
                 break
 
+            # Diagnostic/test commands
+            if s.lower() in ("test", "t"):
+                run_hardware_test()
+                continue
+
+            if s.lower() in ("info", "i"):
+                print(f"Pin object: {NEOPIXEL_PIN} (type: {type(NEOPIXEL_PIN)})")
+                print(f"NUM_PIXELS={NUM_PIXELS}, auto_write={pixels.auto_write}")
+                continue
+
             try:
                 n = int(s)
             except ValueError:
@@ -82,6 +92,34 @@ def interactive_console():
             print("LEDs cleared.")
         except Exception:
             print("Could not clear LEDs (hardware may be absent).")
+
+
+def run_hardware_test():
+    """Attempt basic hardware writes and report any exceptions."""
+    print("Running hardware test: filling all LEDs white for 2 seconds...")
+    try:
+        # Try using PixelBuf API first
+        pixels.fill((255, 255, 255))
+        pixels.show()
+        print("PixelBuf.fill/show succeeded (may be brightness-limited). Sleeping 2s...")
+        time.sleep(2)
+        pixels.fill(0)
+        pixels.show()
+        print("Cleared after PixelBuf test.")
+    except Exception as e:
+        print(f"PixelBuf write failed: {e}")
+
+    # Try raw neopixel_write with a simple buffer
+    try:
+        print("Attempting raw neopixel_write with white buffer...")
+        # Build minimal raw buffer: 3 bytes per pixel (RGB)
+        raw = bytearray()
+        for _ in range(NUM_PIXELS):
+            raw += bytes((255, 255, 255))
+        neopixel_write(NEOPIXEL_PIN, raw)
+        print("neopixel_write(raw) succeeded.")
+    except Exception as e:
+        print(f"neopixel_write(raw) failed: {e}")
 
 
 if __name__ == "__main__":
